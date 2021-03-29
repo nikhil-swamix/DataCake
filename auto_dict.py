@@ -92,7 +92,7 @@ def homogenize_dict(dictpath): #LOGICAL FUNCTION
 	# homogenize_dict(lexico_dict_path)
 
 def add_words_to_dictionary(words):
-	for w in words: get_lexico_def(w)
+	[get_lexico_def(w) for w in words] 
 
 def seed_dict_with_words():
 	#do seeding of dict with standard most common words.
@@ -101,5 +101,19 @@ def seed_dict_with_words():
 	add_words_to_dictionary(words)
 
 if __name__ == '__main__':
-	POOL=mp.Pool(2)
+	# POOL=mp.Pool(2)
+
+
+
+
+
+
+
+
+
+
+
+
+
+	...
 
