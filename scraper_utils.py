@@ -1,41 +1,93 @@
-import random,time
-# import re
+from datetime import datetime
+import random,time,re
+from mxproxy import mx
+from bs4 import Comment
+# mx.auto_pip('spacy')
 
-def time_stamper(delta='future',):
-	from datetime import datetime,date
-	def r(integer): return 1+random.randrange(integer)
-	try:
-		alphatime=datetime(2021+r(50), r(12), r(29), r(23),r(59),r(59))
-	except Exception as e:
-		alphatime=datetime(2021+r(50), r(12), r(29), r(23),r(59),r(59))
-	timestr=f'<time datetime="{alphatime}">Date: {alphatime}</time>'
-	return timestr
+def remove_comments(soup,mode='soup/regex'):
+	if type(soup).__name__ != 'BeautifulSoup': #try converting to native soup/tag
+		try:
+			soup = mx.make_soup(soup)
+		except :
+			pass
+
+	for node in soup.find_all(text=lambda s: isinstance(s, Comment)):
+		node.extract()
+
+	if mode == 'regex':
+		return re.sub(r'<!.*?->','', string)
+	return soup
+
+
+def remove_attributes(soup,keep=['href'],lengthkill={'href':150}):
+	if type(soup).__name__ == 'str':
+		soup = mx.make_soup(soup)
+	for tag in soup.findAll():
+		attrs=list(tag.attrs)
+		for y in attrs:
+			if y not in keep:
+				del tag.attrs[y]
+			if y in lengthkill and len(tag.attrs[y]) > lengthkill[y]:
+				del tag.attrs[y]
+	return soup
+
+
+def remove_empty_tags(soup):
+	[x.extract() for x in soup.findAll() if x.text=='']
+	return soup
+
+
+def make_timestamp(expireAfterDays=(500,50000)):
+	futuretime=time.time()+(random.randrange(*expireAfterDays)*60*60*24)
+	tobj=datetime.fromtimestamp(futuretime)
+	timestrattr=tobj.strftime('%Y-%m-%dT%H:%M:%S') 
+	timestrtext=tobj.strftime('%Y-%m-%d %H:%M:%S %A')
+	timetag=f'<time datetime="{timestrattr}">Expires on {timestrtext}</time>'
+	return timetag
+
 
 def sanitize_text(text): 
 	return re.sub(	r'\n|\t','',text)
 
-def file_namer(text): 
-	return "-".join(	re.sub(r'[\W]',' ',text).split()).lower()
 
-def extract_body(mysoup):
+def file_namer(text): 
+	return "-".join(re.sub(r'[\W]',' ',text).split()).lower()
+
+
+def extract_body(mysoup,soupify=True,removeComments=True,removeAttributes=True,removeEmpty=True):
 	# NOTE: extract body is a heavy function and is destructive
-	# so on every iteration a tag is removed from tree which might have some other info.
 	# recommended to call this at last while extracting info from page
-	parafind=mysoup.findAll('p')
-	lastParentLen=0; theRealParent=[]
+	[x.decompose() for x in mysoup.findAll('a',href=(False,lambda x: '#' in x) )]
+	lastParentLen=0
+	theRealParent=[]
 	try:
 		while mysoup.find('p'):
 			parent=mysoup.find('p').parent.extract()
 			if lastParentLen<len(parent):
 				theRealParent=parent
 				lastParentLen=len(parent)
-		if len(theRealParent)<10: #body too short handling
-			return  theRealParent.text
-		return str(theRealParent).replace('\n','<br>')
-	except Exception as e:
-		pass
 
-def get_author_info(mysoup):
+		# print(theRealParent)
+		if removeComments:
+			theRealParent=remove_comments(theRealParent)
+
+		if removeAttributes:
+			theRealParent=remove_attributes(theRealParent)
+
+		if removeEmpty:
+			theRealParent=remove_empty_tags(theRealParent)
+
+		if not soupify:
+			return str(theRealParent)
+
+		return theRealParent
+
+	except Exception as e:
+		raise e
+		return f'error parsing body::{e}'
+
+
+def get_author_info(mysoup):# use random name generator from https://github.com/philipperemy/name-dataset
 	def r(k=24):
 		return "".join(random.choices(list('1234567890abcdef'),k=24))
 	authorgrav=f'https://www.gravatar.com/avatar/{r()}?s=32&d=identicon&r=PG'
@@ -54,51 +106,28 @@ def get_author_info(mysoup):
 		'links':authorlinks}
 	return authdict
 
+def multi_replace(text,dictonary={'<':' <','>':'> ',}):
+	for repl in dictonary:
+		text=text.replace(repl,dictonary[repl])
+	return text
+
+def explain_word(text,charsabove=6):
+	...
 
 if __name__ == '__main__' :
-	from bs4 import BeautifulSoup as soup
-	import requests,re
-	from mxproxy import mx
-
-	def extract_body(mysoup,return_text=True):
-		# NOTE: extract body is a heavy function and is destructive
-		# recommended to call this at last while extracting info from page
-		[x.decompose() for x in mysoup.findAll(['script','head','style','svg','noscript'])]
-		[x.decompose() for x in mysoup.findAll('a',href=(False,lambda x: '#' in x) )]
-		[x.decompose() for x in mysoup.findAll('p') if len(x.text)<10 ]
-		lastParentLen=0; theRealParent=[]
-		try:
-			while mysoup.find('p'):
-				parent=mysoup.find('p').parent.extract()
-				if lastParentLen<len(parent):
-					theRealParent=parent
-					lastParentLen=len(parent)
-
-			if return_text:
-				return str(theRealParent)
-			else:
-				return theRealParent
-
-		except Exception as e:
-			return 'error parsing body'
-			pass
+	soup=mx.get_page_soup('https://www.helpguide.org/articles/pets/health-benefits-of-walks-with-your-dog.htm')
+	soup=mx.get_page_soup('https://edition.cnn.com/2021/05/23/europe/italy-cable-car-accident-intl/index.html')
 
 
-	def auto_explain(text,frequency,charsabove=6):
-		...
-
-	def multi_replace(text,dictonary={'<':' <','>':'> ',}):
-		for repl in dictonary:
-			text=text.replace(repl,dictonary[repl])
-		return text
+	[x.decompose() for x in soup.findAll(['script','head','style','svg','noscript'])]#remove unwanted
+	body=extract_body(soup)
+	print(body)
 
 
-
-	url='https://en.wikipedia.org/wiki/Google_AdSense'
-	mysoup=soup(requests.get(url).text,features='lxml')
-
-	result=extract_body(mysoup,return_text=False).findAll('p')
-	print(result)
+	# url='https://en.wikipedia.org/wiki/Google_AdSense'
+	# mysoup=soup(requests.get(url).text,features='lxml')
+	# result=extract_body(mysoup,return_text=False).findAll('p')
+	# print(result)
 
 	# print(multi_replace(result))
 
